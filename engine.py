@@ -145,10 +145,10 @@ class CounterpointEngine:
         print("Reglas de clímax aprobadas: Único, bien ubicado y sin tensión de sensible.")
         return True
 
-    def _check_valid_intervals(self):
+    def _check_valid_intervals(self) -> bool:
         """Reglas de movimiento: Saltos permitidos y prohibidos."""
-        # 0=unisono, 6=tritono, 10=septima menor, 11=septima mayor
-        forbidden_intervals = [0, 6, 10, 11]
+        # 6=tritono, 10=septima menor, 11=septima mayor (El 0 se evalua en notas repetidas)
+        forbidden_intervals = [6, 10, 11]
 
         for i in range(len(self.melody_notes) - 1):
             current_note = self.melody_notes[i]
@@ -156,16 +156,28 @@ class CounterpointEngine:
             interval = abs(current_note - next_note)
 
             if interval > 12:
-                print(
-                    f"Error de movimiento: Salto mayor a una octava entre {current_note} y {next_note} ({interval} semitonos).")
+                print(f"Error de movimiento: Salto mayor a una octava entre {current_note} y {next_note} ({interval} semitonos).")
                 return False
 
             if interval in forbidden_intervals:
-                print(
-                    f"Error de movimiento: Intervalo prohibido de {interval} semitonos entre {current_note} y {next_note}.")
+                print(f"Error de movimiento: Intervalo prohibido de {interval} semitonos entre {current_note} y {next_note}.")
                 return False
 
-        print("Regla aprobada: Todos los intervalos y saltos son válidos.")
+        print("Regla de saltos: Todos los intervalos son válidos.")
+        return True
+
+    def _check_repeated_notes(self) -> bool:
+        """Regla 14: Prohibición de notas repetidas (unísono)."""
+        for i in range(len(self.melody_notes) - 1):
+            current_note = self.melody_notes[i]
+            next_note = self.melody_notes[i + 1]
+
+            if current_note == next_note:
+                print(
+                    f"Error de movimiento: Nota repetida detectada ({current_note} -> {next_note}). Está estrictamente prohibido repetir la misma nota en el Cantus Firmus.")
+                return False
+
+        print("Regla de conduccion: No hay notas repetidas consecutivamente.")
         return True
 
     def _check_stepwise_motion(self) -> bool:
@@ -246,6 +258,7 @@ class CounterpointEngine:
         if not self._check_rhythm(): return False
         if not self._check_climax(): return False
         if not self._check_valid_intervals(): return False
+        if not self._check_repeated_notes(): return False
         if not self._check_stepwise_motion(): return False
         if not self._check_undulating_curve(): return False
 
