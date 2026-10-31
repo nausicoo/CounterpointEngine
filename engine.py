@@ -106,7 +106,7 @@ class CounterpointEngine:
                 print(f"Error rítmico en la nota {i+1}: Figura incorrecta: Recuerda que en la primera especie se usan exclusivamente redondas.")
                 return False
 
-        print("Regla aprobada: Toda la melodía está escrita en redondas.")
+        print("Regla rítmica: Toda la melodía está escrita en redondas.")
         return True
 
     def _check_climax(self):
@@ -135,7 +135,7 @@ class CounterpointEngine:
                 f"Sugerencia de clímax: El clímax está en el compás {climax_index + 1}. Pedagógicamentea - en nivel básico - se sugiere ubicarlo en el segundo tercio del ejercicio.")
 
         # Regla 10: Climax nunca en la sensible (7mo grado)
-        # Calculamos la sensible sumando 11 semitonos a la tonica
+        # Se calcula la sensible sumando 11 semitonos a la tonica
         sensible_pitch_class = (self.tonic_pitch_class + 11) % 12
         if (climax_note % 12) == sensible_pitch_class:
             print(
@@ -212,12 +212,13 @@ class CounterpointEngine:
         return True
 
     def _check_undulating_curve(self) -> bool:
-        """Reglas 12 y 13: Curva ondulante y variedad direccional (máximo 4 movimientos seguidos)."""
+        """Reglas 12 y 13: Curva ondulante y variedad direccional."""
         if len(self.melody_notes) < 3:
             return True
 
         consecutive_direction = 0
         current_direction = 0  # 1 para subir, -1 para bajar
+        warning_triggered = False  # Bandera para saber si se lanza la advertencia
 
         for i in range(len(self.melody_notes) - 1):
             current_note = self.melody_notes[i]
@@ -236,13 +237,62 @@ class CounterpointEngine:
                 consecutive_direction = 1
                 current_direction = direction
 
-            # 4 movimientos seguidos = 5 notas (compases) en la misma direccion
-            if consecutive_direction >= 4:
+            # 5 movimientos seguidos = 6 notas en la misma dirección (ERROR)
+            if consecutive_direction == 5:
                 print(
-                    f"[WARNING] Sugerencia de conduccion: La melodia sube o baja durante {consecutive_direction + 1} compases seguidos. Alterna la direccion para mantener una curva ondulante.")
-                return True  # Retornamos True para que siga evaluando el resto
+                    f"Error de conducción: Se detectó un movimiento que se mueve en la misma dirección durante 6 notas.")
+                return False
 
-        print("Regla de conduccion: La melodia tiene una curva ondulante con buena variedad direccional.")
+            # 4 movimientos seguidos = 5 notas en la misma dirección (WARNING)
+            elif consecutive_direction == 4:
+                print(
+                    f"Advertencia: Se detectó un movimiento que lleva 5 notas en la misma dirección. Se recomienda alternar para mantener una curva satisfactoria.")
+                warning_triggered = True
+                # No se retorna aqui para que el ciclo siga vigilando si llega a la 6ta nota
+
+        # Si termino toda la pieza y nunca entro al warning
+        if not warning_triggered:
+            print("Regla de conducción: La melodía tiene una curva ondulante con buena variedad direccional.")
+
+        return True
+    def _check_futile_oscillation(self) -> bool:
+        """Regla 15: Advertencia para oscilación fútil (rebotes tipo A-B-A)."""
+        if len(self.melody_notes) < 3:
+            return True
+
+        for i in range(len(self.melody_notes) - 2):
+            # Se compara la nota actual con la que esta dos posiciones adelante
+            if self.melody_notes[i] == self.melody_notes[i + 2]:
+                print(
+                    f"Advertencia: Sugerencia de conducción. Oscilación detectada ({self.melody_notes[i]} -> {self.melody_notes[i + 1]} -> {self.melody_notes[i + 2]}). Trata de evitar rebotes inmediatos para no estancar la fluidez de la línea.")
+                return True
+
+        print("Regla de conducción: No hay oscilaciones fútiles (rebotes A-B-A).")
+        return True
+
+    def _check_sequences(self) -> bool:
+        """Regla 16: Evitar diseños rítmico-melódicos idénticos que se repitan a diferentes alturas."""
+        if len(self.melody_notes) < 6:
+            return True
+
+        # Se extrae un arreglo de intervalos relativos
+        intervals = []
+        for i in range(len(self.melody_notes) - 1):
+            intervals.append(self.melody_notes[i + 1] - self.melody_notes[i])
+
+        # Se busca si un patron de 2 intervalos (un motivo de 3 notas) se repite
+        pattern_length = 2
+        for i in range(len(intervals) - pattern_length):
+            pattern = intervals[i:i + pattern_length]
+
+            # Se compara ese patron con el resto de la melodia hacia adelante
+            for j in range(i + pattern_length, len(intervals) - pattern_length + 1):
+                if intervals[j:j + pattern_length] == pattern:
+                    print(
+                        f"Advertencia: Secuencias similares melódicas detectadas. Un motivo de 3 o más notas se repite de forma mecánica. Pedagógicamente se prefiere la asimetría.")
+                    return True  # Es advertencia estetica, no se rompe la ejecucion
+
+        print("Regla de conducción: No se detectaron secuencias mecánicas similares.")
         return True
 
     def check_cantus_firmus_rules(self) -> bool:
@@ -261,6 +311,8 @@ class CounterpointEngine:
         if not self._check_repeated_notes(): return False
         if not self._check_stepwise_motion(): return False
         if not self._check_undulating_curve(): return False
+        if not self._check_futile_oscillation(): return False
+        if not self._check_sequences(): return False
 
         print("\nEl Cantus Firmus ha pasado todas las pruebas estructurales y de movimiento.")
         return True
