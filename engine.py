@@ -95,7 +95,7 @@ class CounterpointEngine:
                 f"Sugerencia de ámbito: Rango de {ambitus} semitonos (mayor a una décima). Se sugiere reducirlo para asegurar una mejor cantabilidad.")
         elif ambitus > 12:
             print(
-                f"Nota de ambito: Rango de {ambitus} semitonos. Es valido pero el ideal pedagógico es no superar la octava (12 semitonos).")
+                f"Nota de ambito: Rango de {ambitus} semitonos. Es válido pero el ideal pedagógico es no superar la octava (12 semitonos).")
 
         # Advertencias de estilo para el registro
         if lowest_note < 40 or highest_note > 81:
@@ -166,7 +166,7 @@ class CounterpointEngine:
 
             if current_note == next_note:
                 print(
-                    f"Error de movimiento: Nota repetida detectada ({current_note} -> {next_note}). Está estrictamente prohibido repetir la misma nota en el Cantus Firmus.")
+                    f"Error de movimiento: Nota repetida detectada ({current_note} a {next_note}). Está estrictamente prohibido repetir la misma nota en el Cantus Firmus.")
                 return False
 
         print("Regla de conduccion: No hay notas repetidas consecutivamente.")
@@ -256,7 +256,7 @@ class CounterpointEngine:
             # Se compara la nota actual con la que esta dos posiciones adelante
             if self.melody_notes[i] == self.melody_notes[i + 2]:
                 print(
-                    f"Advertencia: Sugerencia de conducción. Oscilación detectada ({self.melody_notes[i]} -> {self.melody_notes[i + 1]} -> {self.melody_notes[i + 2]}). Trata de evitar rebotes inmediatos para no estancar la fluidez de la línea.")
+                    f"Advertencia: Sugerencia de conducción. Oscilación detectada de ({self.melody_notes[i]} a {self.melody_notes[i + 1]} a {self.melody_notes[i + 2]}). Trata de evitar rebotes inmediatos para no estancar la fluidez de la línea.")
                 return True
 
         print("Regla de conducción: No hay oscilaciones fútiles (rebotes A-B-A).")
@@ -311,7 +311,7 @@ class CounterpointEngine:
             if interval_semitones == 8:
                 if direction == -1:
                     print(
-                        f"Error de salto: Sexta menor descendente detectada ({current_note} -> {next_note}). Este salto solo se permite en dirección ascendente.")
+                        f"Error de salto: Sexta menor descendente detectada ({current_note} a {next_note}). Este salto solo se permite en dirección ascendente.")
                     return False
                 continue  # Si es ascendente, pasa
 
@@ -349,7 +349,7 @@ class CounterpointEngine:
                 # 1. Verificar que sea ascendente
                 if next_note < current_note:
                     print(
-                        f"Error de salto: Salto de octava descendente detectado ({nota1} -> {nota2}). El salto de 8va debe hacerse mediante un impulso ascendente.")
+                        f"Error de salto: Salto de octava descendente detectado ({nota1} a {nota2}). El salto de 8va debe hacerse mediante un impulso ascendente.")
                     return False
 
                 # 2. Verificar que sea precedida por grado conjunto descendente (si no es la primera nota)
@@ -360,7 +360,7 @@ class CounterpointEngine:
                     if prev_interval not in [-1, -2]:
                         nota_previa = self._midi_to_name(prev_note)
                         print(
-                            f"Error de conducción: El salto de octava ({nota1} -> {nota2}) debe prepararse viniendo de un grado conjunto descendente (vienes de un {nota_previa}).")
+                            f"Error de conducción: El salto de octava ({nota1} a {nota2}) debe prepararse viniendo de un grado conjunto descendente (vienes de un {nota_previa}).")
                         return False
 
                 # 3. Verificar que sea seguida por grado conjunto descendente (si no es el final)
@@ -371,10 +371,51 @@ class CounterpointEngine:
                     if next_interval not in [-1, -2]:
                         nota_siguiente = self._midi_to_name(after_next_note)
                         print(
-                            f"Error de conducción: El salto de octava ({nota1} -> {nota2}) debe compensarse inmediatamente bajando por grado conjunto (fuiste a un {nota_siguiente}).")
+                            f"Error de conducción: El salto de octava ({nota1} a {nota2}) debe compensarse inmediatamente bajando por grado conjunto (te fuiste a un {nota_siguiente}).")
                         return False
 
         print("Regla de octava: Los saltos de octava (si los hay) cumplen la normativa de preparación y resolución.")
+        return True
+
+    def _check_leap_compensation(self) -> bool:
+        """Regla 22: Compensación de saltos. Tras saltos >= 4ta (5 semitonos), cambiar de dirección por grado conjunto."""
+        # Saltos que exigen compensacion: 4J(5), 5J(7), 6m(8), 8J(12)
+        leaps_to_compensate = [5, 7, 8, 12]
+
+        for i in range(len(self.melody_notes) - 2):
+            note1 = self.melody_notes[i]
+            note2 = self.melody_notes[i + 1]
+            note3 = self.melody_notes[i + 2]
+
+            interval1 = abs(note1 - note2)
+
+            # Si se encuentra un salto grande, se checa como se resuelve
+            if interval1 in leaps_to_compensate:
+                # Direcciones: 1 (Sube), -1 (Baja)
+                dir1 = 1 if note2 > note1 else -1
+                dir2 = 1 if note3 > note2 else -1
+
+                interval2 = abs(note2 - note3)
+
+                name1 = self._midi_to_name(note1)
+                name2 = self._midi_to_name(note2)
+                name3 = self._midi_to_name(note3)
+
+                # 1. Verificar el cambio de direccion en movimiento contrario
+                if dir1 == dir2:
+                    direccion_texto = 'arriba' if dir2 == 1 else 'abajo'
+                    print(
+                        f"Error de conducción: El salto de ({name1} a {name2}) no fue compensado. La melodía debe cambiar de dirección inmediatamente, pero continuó hacia {direccion_texto} a {name3}.")
+                    return False
+
+                # 2. Verificar que la compensacion sea por grado conjunto (1 o 2 semitonos)
+                if interval2 not in [1, 2]:
+                    print(
+                        f"Error de conducción: El salto de ({name1} a {name2}) cambió de dirección, pero no por grado conjunto (saltó a un {name3}). En la compensación se exige un movimiento de segunda.")
+                    return False
+
+        print(
+            "Regla de compensación: Todos los saltos grandes fueron resueltos correctamente por grado conjunto en dirección contraria.")
         return True
 
     def check_cantus_firmus_rules(self) -> bool:
@@ -396,6 +437,7 @@ class CounterpointEngine:
         if not self._check_sequences(): return False
         if not self._check_valid_intervals(): return False
         if not self._check_octave_leap(): return False
+        if not self._check_leap_compensation(): return False
 
         print("\nEl Cantus Firmus ha pasado todas las pruebas estructurales y de movimiento.")
         return True
