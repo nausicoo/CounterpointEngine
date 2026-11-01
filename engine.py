@@ -43,12 +43,25 @@ class CounterpointEngine:
                             self.note_durations.append(msg.time)
 
             # mensaje limpio para el usuario
-            print(f"Éxito: Archivo analizado. Se detectó una melodía de {len(self.melody_notes)} notas.")
+            print(f"Archivo .mid analizado. Se detectó un ejercicio de {len(self.melody_notes)} notas.")
             return True
 
         except FileNotFoundError:
             print(f"Error: No se encontró el archivo {self.midi_file_path}. Revisa que esté en la misma carpeta.")
             return False
+
+    @staticmethod
+    def _midi_to_name(midi_note: int) -> str:
+        """Traductor: Convierte un numero MIDI (ej. 60) a nombre de nota (ej. Do4)."""
+        notas = ['Do', 'Do#', 'Re', 'Re#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si']
+        nombre_nota = notas[midi_note % 12]
+
+        # En el estandar MIDI, el Do central es el 60 (Do4).
+        # Dividimos entre 12 y restamos 1 para sacar el numero de octava correcto.
+        octava = (midi_note // 12) - 1
+
+        return f"{nombre_nota}{octava}"
+
     def _check_valid_start_end(self):
         """Reglas estructurales: Inicio y fin correctos del Cantus Firmus."""
         first_note = self.melody_notes[0]
@@ -145,27 +158,6 @@ class CounterpointEngine:
         print("Reglas de clímax aprobadas: Único, bien ubicado y sin tensión de sensible.")
         return True
 
-    def _check_valid_intervals(self) -> bool:
-        """Reglas de movimiento: Saltos permitidos y prohibidos."""
-        # 6=tritono, 10=septima menor, 11=septima mayor (El 0 se evalua en notas repetidas)
-        forbidden_intervals = [6, 10, 11]
-
-        for i in range(len(self.melody_notes) - 1):
-            current_note = self.melody_notes[i]
-            next_note = self.melody_notes[i + 1]
-            interval = abs(current_note - next_note)
-
-            if interval > 12:
-                print(f"Error de movimiento: Salto mayor a una octava entre {current_note} y {next_note} ({interval} semitonos).")
-                return False
-
-            if interval in forbidden_intervals:
-                print(f"Error de movimiento: Intervalo prohibido de {interval} semitonos entre {current_note} y {next_note}.")
-                return False
-
-        print("Regla de saltos: Todos los intervalos son válidos.")
-        return True
-
     def _check_repeated_notes(self) -> bool:
         """Regla 14: Prohibición de notas repetidas (unísono)."""
         for i in range(len(self.melody_notes) - 1):
@@ -243,7 +235,7 @@ class CounterpointEngine:
                     f"Error de conducción: Se detectó un movimiento que se mueve en la misma dirección durante 6 notas.")
                 return False
 
-            # 4 movimientos seguidos = 5 notas en la misma dirección (WARNING)
+            # 4 movimientos seguidos = 5 notas en la misma dirección (ADVERTENCIA)
             elif consecutive_direction == 4:
                 print(
                     f"Advertencia: Se detectó un movimiento que lleva 5 notas en la misma dirección. Se recomienda alternar para mantener una curva satisfactoria.")
@@ -295,6 +287,96 @@ class CounterpointEngine:
         print("Regla de conducción: No se detectaron secuencias mecánicas similares.")
         return True
 
+    def _check_valid_intervals(self) -> bool:
+        """Reglas 17 a 20: Saltos permitidos y prohibidos."""
+        for i in range(len(self.melody_notes) - 1):
+            current_note = self.melody_notes[i]
+            next_note = self.melody_notes[i + 1]
+            interval_semitones = abs(current_note - next_note)
+
+            # 1 = ascendente, -1 = descendente
+            direction = 1 if next_note > current_note else -1
+
+            # Regla 20: Salto mayor a octava
+            if interval_semitones > 12:
+                print(
+                    f"Error de salto: Salto mayor a una octava entre {current_note} y {next_note} ({interval_semitones} semitonos).")
+                return False
+
+            # Ignoramos los grados conjuntos (1 y 2 semitonos) porque no son saltos
+            if interval_semitones in [1, 2]:
+                continue
+
+            # Regla 18: La 6ta menor (8 semitonos) solo se permite subiendo
+            if interval_semitones == 8:
+                if direction == -1:
+                    print(
+                        f"Error de salto: Sexta menor descendente detectada ({current_note} -> {next_note}). Este salto solo se permite en dirección ascendente.")
+                    return False
+                continue  # Si es ascendente, pasa
+
+            # Saltos permitidos: 3m(3), 3M(4), 4J(5), 5J(7), 8J(12)
+            allowed_leaps = [3, 4, 5, 7, 12]
+
+            # Reglas 17, 18 (6ta M) y 19 (Septimas) y el tritono
+            if interval_semitones not in allowed_leaps:
+                interval_names = {6: "Tritono (4ta Aum / 5ta Dism)", 9: "Sexta Mayor", 10: "Séptima menor",
+                                  11: "Séptima Mayor"}
+                name = interval_names.get(interval_semitones, f"{interval_semitones} semitonos")
+
+                # Se usa el traductor de notas para mostrar el nombre de las notas en lugar del numero MIDI
+                nota1 = self._midi_to_name(current_note)
+                nota2 = self._midi_to_name(next_note)
+
+                print(f"Error de salto: Intervalo prohibido detectado ({name} entre {nota1} y {nota2}).")
+                return False
+
+        print("Regla de saltos: Todos los intervalos son válidos según el contrapunto estricto.")
+        return True
+
+    def _check_octave_leap(self) -> bool:
+        """Regla 21: Reglas estrictas para el salto de octava."""
+        for i in range(len(self.melody_notes) - 1):
+            current_note = self.melody_notes[i]
+            next_note = self.melody_notes[i + 1]
+            interval = abs(current_note - next_note)
+
+            if interval == 12:
+                # Usamos el traductor midi_to_name para las notas del salto
+                nota1 = self._midi_to_name(current_note)
+                nota2 = self._midi_to_name(next_note)
+
+                # 1. Verificar que sea ascendente
+                if next_note < current_note:
+                    print(
+                        f"Error de salto: Salto de octava descendente detectado ({nota1} -> {nota2}). El salto de 8va debe hacerse mediante un impulso ascendente.")
+                    return False
+
+                # 2. Verificar que sea precedida por grado conjunto descendente (si no es la primera nota)
+                if i > 0:
+                    prev_note = self.melody_notes[i - 1]
+                    prev_interval = current_note - prev_note
+                    # Debe ser descendente (negativo) y de grado conjunto (-1 o -2)
+                    if prev_interval not in [-1, -2]:
+                        nota_previa = self._midi_to_name(prev_note)
+                        print(
+                            f"Error de conducción: El salto de octava ({nota1} -> {nota2}) debe prepararse viniendo de un grado conjunto descendente (vienes de un {nota_previa}).")
+                        return False
+
+                # 3. Verificar que sea seguida por grado conjunto descendente (si no es el final)
+                if i < len(self.melody_notes) - 2:
+                    after_next_note = self.melody_notes[i + 2]
+                    next_interval = after_next_note - next_note
+                    # Debe ser descendente (negativo) y de grado conjunto (-1 o -2)
+                    if next_interval not in [-1, -2]:
+                        nota_siguiente = self._midi_to_name(after_next_note)
+                        print(
+                            f"Error de conducción: El salto de octava ({nota1} -> {nota2}) debe compensarse inmediatamente bajando por grado conjunto (fuiste a un {nota_siguiente}).")
+                        return False
+
+        print("Regla de octava: Los saltos de octava (si los hay) cumplen la normativa de preparación y resolución.")
+        return True
+
     def check_cantus_firmus_rules(self) -> bool:
         """Director de orquesta: Evalúa todas las reglas paso a paso."""
         if not self.melody_notes:
@@ -307,12 +389,13 @@ class CounterpointEngine:
         if not self._check_structure_and_range(): return False
         if not self._check_rhythm(): return False
         if not self._check_climax(): return False
-        if not self._check_valid_intervals(): return False
         if not self._check_repeated_notes(): return False
         if not self._check_stepwise_motion(): return False
         if not self._check_undulating_curve(): return False
         if not self._check_futile_oscillation(): return False
         if not self._check_sequences(): return False
+        if not self._check_valid_intervals(): return False
+        if not self._check_octave_leap(): return False
 
         print("\nEl Cantus Firmus ha pasado todas las pruebas estructurales y de movimiento.")
         return True
